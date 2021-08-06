@@ -1,3 +1,6 @@
-# go-converge
+# go-stream
 
-go-converge will converge input from upper storage to underlying storage. 
+`go-stream` will allow stream reading/writing on `Storage` via adding a new stream layer.
+
+This lib will maintain data between under and upper storage layer.
+
