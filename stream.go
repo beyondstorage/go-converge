@@ -2,6 +2,7 @@ package stream
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"sync"
 
@@ -10,8 +11,13 @@ import (
 )
 
 type Stream struct {
-	upper types.Storager
-	under types.Storager
+	method string
+	upper  types.Storager
+	under  types.Storager
+	// Only valid if method is "multipart" and under supports.
+	underMultipart types.Multiparter
+	// Only valid if method is "append" and under supports.
+	underAppend types.Appender
 
 	p     *ants.Pool
 	ch    chan op
@@ -64,14 +70,18 @@ func (s *Stream) StartBranch(id uint64, path string) {
 
 	br := newBranch(id, path)
 
-	o, err := s.under.(types.Multiparter).CreateMultipart(br.path)
-	if err != nil {
-		s.errch <- err
-		return
+	switch s.method {
+	case PersisMethodMultipart:
+		o, err := s.underMultipart.CreateMultipart(br.path)
+		if err != nil {
+			s.errch <- err
+			return
+		}
+		br.object = o
+		br.parts = make(map[int]*types.Part)
+	default:
+		panic(fmt.Errorf("start branch with invalid method: %v", s.method))
 	}
-
-	br.object = o
-	br.parts = make(map[int]*types.Part)
 
 	s.branches[id] = br
 }
@@ -97,7 +107,14 @@ func (s *Stream) EndBranch(id uint64) {
 	br := s.branches[id]
 	s.branchLock.Unlock()
 
-	s.complete(br)
+	switch s.method {
+	case PersisMethodMultipart:
+		s.completeViaMultipart(br)
+	default:
+		panic(fmt.Errorf("end branch with invalid method: %v", s.method))
+	}
+
+	s.completeViaMultipart(br)
 
 	s.branchLock.Lock()
 	delete(s.branches, id)
@@ -126,30 +143,16 @@ func (s *Stream) Serve() {
 			continue
 		}
 
-		br.Lock()
-		start := br.persistedIdx
-		end := br.nextIdx
-		size := br.currentSize - br.persistedSize
-		partNumber := br.nextPartNumber
-		br.persistedSize = br.currentSize
-		br.persistedIdx = br.nextIdx
-		br.nextPartNumber += 1
-		br.Unlock()
-
-		br.wg.Add(1)
-		err := s.p.Submit(func() {
-			defer br.wg.Done()
-
-			s.persistViaWriteMultipart(br, start, end, size, partNumber)
-		})
-		if err != nil {
-			s.errch <- err
-			return
+		switch s.method {
+		case PersisMethodMultipart:
+			s.serveViaMultipart(br)
+		default:
+			panic(fmt.Errorf("serve with invalid method: %v", s.method))
 		}
 	}
 }
 
-func (s *Stream) persistViaWriteMultipart(br *branch, start, end uint64, size int64, partNumber int) {
+func (s *Stream) persistViaMultipart(br *branch, start, end uint64, size int64, partNumber int) {
 	r, err := s.read(br.id, start, end)
 	if err != nil {
 		s.errch <- err
@@ -163,7 +166,7 @@ func (s *Stream) persistViaWriteMultipart(br *branch, start, end uint64, size in
 		}
 	}()
 
-	_, part, err := s.under.(types.Multiparter).WriteMultipart(br.object, r, size, partNumber)
+	_, part, err := s.underMultipart.WriteMultipart(br.object, r, size, partNumber)
 	if err != nil {
 		s.errch <- err
 		return
@@ -196,7 +199,30 @@ func (s *Stream) read(id, start, end uint64) (r io.ReadCloser, err error) {
 	return r, nil
 }
 
-func (s *Stream) complete(br *branch) {
+func (s *Stream) serveViaMultipart(br *branch) {
+	br.Lock()
+	start := br.persistedIdx
+	end := br.nextIdx
+	size := br.currentSize - br.persistedSize
+	partNumber := br.nextPartNumber
+	br.persistedSize = br.currentSize
+	br.persistedIdx = br.nextIdx
+	br.nextPartNumber += 1
+	br.Unlock()
+
+	br.wg.Add(1)
+	err := s.p.Submit(func() {
+		defer br.wg.Done()
+
+		s.persistViaMultipart(br, start, end, size, partNumber)
+	})
+	if err != nil {
+		s.errch <- err
+		return
+	}
+}
+
+func (s *Stream) completeViaMultipart(br *branch) {
 	// Check for dirty data.
 	//
 	// persistedIdx < nextIdx means we still have data to write.
@@ -210,7 +236,7 @@ func (s *Stream) complete(br *branch) {
 		err := s.p.Submit(func() {
 			defer br.wg.Done()
 
-			s.persistViaWriteMultipart(br, start, end, size, partNumber)
+			s.persistViaMultipart(br, start, end, size, partNumber)
 		})
 		if err != nil {
 			s.errch <- err
@@ -226,7 +252,7 @@ func (s *Stream) complete(br *branch) {
 		parts = append(parts, br.parts[i])
 	}
 
-	err := s.under.(types.Multiparter).CompleteMultipart(br.object, parts)
+	err := s.underMultipart.CompleteMultipart(br.object, parts)
 	if err != nil {
 		s.errch <- err
 		return
