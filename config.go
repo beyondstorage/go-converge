@@ -8,9 +8,9 @@ import (
 )
 
 const (
-	PersisMethodWrite     = "write"
-	PersisMethodMultipart = "multipart"
-	PersisMethodAppend    = "append"
+	PersistMethodWrite     = "write"
+	PersistMethodMultipart = "multipart"
+	PersistMethodAppend    = "append"
 )
 
 type Config struct {
@@ -24,7 +24,7 @@ func New(upper, under types.Storager) (s *Stream, err error) {
 	return NewWithConfig(&Config{
 		Upper:         upper,
 		Under:         under,
-		PersistMethod: PersisMethodMultipart,
+		PersistMethod: PersistMethodMultipart,
 	})
 }
 
@@ -37,14 +37,14 @@ func NewWithConfig(cfg *Config) (s *Stream, err error) {
 
 	// Validate persist method.
 	switch cfg.PersistMethod {
-	case PersisMethodMultipart:
+	case PersistMethodMultipart:
 		m, ok := cfg.Under.(types.Multiparter)
 		if !ok {
 			return nil, fmt.Errorf("under storage %s doesn't support persis method multipart", cfg.Under)
 		}
 		s.underMultipart = m
 	// TODO: we will support appender later.
-	case PersisMethodWrite:
+	case PersistMethodWrite:
 		break
 	default:
 		return nil, fmt.Errorf("not supported persis method: %v", cfg.PersistMethod)
@@ -55,8 +55,6 @@ func NewWithConfig(cfg *Config) (s *Stream, err error) {
 	if err != nil {
 		return nil, fmt.Errorf("init stream: %w", err)
 	}
-
-	s.branches = make(map[uint64]*branch)
 
 	// No buffer channel for op.
 	s.ch = make(chan op)
