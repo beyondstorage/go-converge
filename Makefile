@@ -1,5 +1,7 @@
 SHELL := /bin/bash
 
+-include Makefile.env
+
 .PHONY: all check format vet lint build test generate tidy
 
 help:
@@ -28,6 +30,11 @@ build: tidy generate format check
 test:
 	go test -race -coverprofile=coverage.txt -covermode=atomic -v ./...
 	go tool cover -html="coverage.txt" -o "coverage.html"
+
+integration_test:
+	pushd tests/ && \
+	go test -race -count=1 -v . && \
+	popd
 
 tidy:
 	go mod tidy
