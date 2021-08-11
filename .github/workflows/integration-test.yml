@@ -5,12 +5,11 @@ on: [push, pull_request]
 jobs:
   integration_test:
     name: "Integration Test"
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
 
     strategy:
       matrix:
         go: [ "1.15", "1.16" ]
-        os: [ ubuntu-latest, windows-latest, macos-latest ]
 
     services:
       minio:
