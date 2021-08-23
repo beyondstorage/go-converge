@@ -20,6 +20,8 @@ All data will be written into upper first.
 s, err := stream.NewWithConfig(&stream.Config{
     Upper:         upperStore,
     Under:         underStore,
+    // Set speed limit here to prevent upper been written too fast.
+    SpeedLimit:    10 * 1024 * 1024,
     PersistMethod: stream.PersistMethodMultipart,
 })
 if err != nil {
