@@ -5,6 +5,7 @@ import (
 
 	"github.com/beyondstorage/go-storage/v4/types"
 	"github.com/panjf2000/ants/v2"
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -17,6 +18,8 @@ type Config struct {
 	Upper types.Storager
 	Under types.Storager
 
+	// SpeedLimit for upper storager, unit is B/s
+	SpeedLimit    int
 	PersistMethod string
 }
 
@@ -48,6 +51,10 @@ func NewWithConfig(cfg *Config) (s *Stream, err error) {
 		break
 	default:
 		return nil, fmt.Errorf("not supported persis method: %v", cfg.PersistMethod)
+	}
+
+	if cfg.SpeedLimit != 0 {
+		s.limit = rate.NewLimiter(rate.Limit(cfg.SpeedLimit), cfg.SpeedLimit)
 	}
 
 	// FIXME: we will support setting workers later.

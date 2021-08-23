@@ -25,6 +25,7 @@ func setup(t *testing.T) (s *stream.Stream, upper, under types.Storager) {
 	s, err = stream.NewWithConfig(&stream.Config{
 		Upper:         upperStore,
 		Under:         underStore,
+		SpeedLimit:    10 * 1024 * 1024, // Use 10M/s for test.
 		PersistMethod: stream.PersistMethodMultipart,
 	})
 	if err != nil {

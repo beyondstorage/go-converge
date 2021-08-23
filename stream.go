@@ -2,6 +2,7 @@ package stream
 
 import (
 	"fmt"
+	"golang.org/x/time/rate"
 	"io"
 	"sync"
 
@@ -19,6 +20,7 @@ type Stream struct {
 	// Only valid if method is "append" and under supports.
 	underAppend types.Appender
 
+	limit *rate.Limiter
 	p     *ants.Pool
 	ch    chan op
 	errch chan error
