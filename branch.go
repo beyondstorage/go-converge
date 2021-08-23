@@ -2,8 +2,9 @@ package stream
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
-	"log"
+	"io"
 	"sync"
 
 	"github.com/beyondstorage/go-storage/v4/types"
@@ -50,6 +51,37 @@ func (br *Branch) Write(idx uint64, data []byte) (n int64, err error) {
 	return n, nil
 }
 
+func (br *Branch) ReadFrom(r io.Reader) (n int64, err error) {
+	// Use 4mb as chunk.
+	chunkSize := int64(4 * 1024 * 1024)
+	idx := uint64(0)
+	n = 0
+
+	for {
+		p := formatPath(br.id, idx)
+
+		// Update index.
+		idx++
+
+		size, err := br.s.upper.Write(p, r, chunkSize)
+		// No matter we read success or not, we both need to send data.
+		n += size
+		br.wg.Add(1)
+		br.s.ch <- op{
+			br:   br,
+			size: size,
+		}
+
+		if err != nil && errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return n, err
+		}
+	}
+	return n, nil
+}
+
 func (br *Branch) Complete() (err error) {
 	br.wg.Add(1)
 	br.s.ch <- op{
@@ -89,7 +121,6 @@ func (br *Branch) persist(size int64, done bool) {
 
 	// All data has been persisted, return directly.
 	if br.currentSize.Load()-br.persistedSize == 0 {
-		log.Printf("skip for no data")
 		br.wg.Done()
 		return
 	}

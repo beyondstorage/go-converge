@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"fmt"
 	"github.com/beyondstorage/go-storage/v4/types"
 )
 
@@ -28,20 +29,21 @@ func (br *Branch) persistViaMultipart(start, end uint64, size int64, partNumber 
 
 	r, err := br.s.read(br.id, start, end)
 	if err != nil {
-		br.s.errch <- err
+		br.s.errch <- fmt.Errorf("pipe read id %d from %d to %d: %w",
+			br.id, start, end, err)
 		return
 	}
 	defer func() {
 		err = r.Close()
 		if err != nil {
-			br.s.errch <- err
+			br.s.errch <- fmt.Errorf("close pipe reader: %w", err)
 			return
 		}
 	}()
 
 	_, part, err := br.s.underMultipart.WriteMultipart(br.object, r, size, partNumber)
 	if err != nil {
-		br.s.errch <- err
+		br.s.errch <- fmt.Errorf("write multipart: %w", err)
 		return
 	}
 

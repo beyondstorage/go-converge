@@ -3,7 +3,6 @@ package stream
 import (
 	"fmt"
 	"io"
-	"log"
 	"sync"
 
 	"github.com/beyondstorage/go-storage/v4/types"
@@ -75,13 +74,13 @@ func (s *Stream) read(id, start, end uint64) (r io.ReadCloser, err error) {
 			p := formatPath(id, i)
 			_, err := s.upper.Read(p, w)
 			if err != nil {
-				s.errch <- err
+				s.errch <- fmt.Errorf("pipe read from %s: %w", p, err)
 				return
 			}
 		}
 		err := w.Close()
 		if err != nil {
-			s.errch <- err
+			s.errch <- fmt.Errorf("close pipe writter: %w", err)
 			return
 		}
 	}()
@@ -94,7 +93,6 @@ func (s *Stream) delete(id, start, end uint64) (err error) {
 		p := formatPath(id, i)
 		err = s.upper.Delete(p)
 		if err != nil {
-			log.Printf("object %s not found", p)
 			return
 		}
 	}
