@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
+	"github.com/beyondstorage/go-storage/v4/pairs"
 	"github.com/beyondstorage/go-storage/v4/types"
 	"go.uber.org/atomic"
 )
@@ -35,10 +37,29 @@ type Branch struct {
 }
 
 func (br *Branch) Write(idx uint64, data []byte) (n int64, err error) {
+	var ps []types.Pair
+
+	// FIXME: we need to add default pari instead.
+	if br.s.limit != nil {
+		ps = append(ps, pairs.WithIoCallback(func(bs []byte) {
+			l := len(bs)
+
+			for l > 0 {
+				n := br.s.limit.Burst()
+				if n > l {
+					n = l
+				}
+				r := br.s.limit.ReserveN(time.Now(), n)
+				time.Sleep(r.Delay())
+				l -= n
+			}
+		}))
+	}
+
 	p := formatPath(br.id, idx)
 
 	size := int64(len(data))
-	n, err = br.s.upper.Write(p, bytes.NewReader(data), size)
+	n, err = br.s.upper.Write(p, bytes.NewReader(data), size, ps...)
 	if err != nil {
 		return
 	}
@@ -52,6 +73,25 @@ func (br *Branch) Write(idx uint64, data []byte) (n int64, err error) {
 }
 
 func (br *Branch) ReadFrom(r io.Reader) (n int64, err error) {
+	var ps []types.Pair
+
+	// FIXME: we need to add default pari instead.
+	if br.s.limit != nil {
+		ps = append(ps, pairs.WithIoCallback(func(bs []byte) {
+			l := len(bs)
+
+			for l > 0 {
+				n := br.s.limit.Burst()
+				if n > l {
+					n = l
+				}
+				r := br.s.limit.ReserveN(time.Now(), n)
+				time.Sleep(r.Delay())
+				l -= n
+			}
+		}))
+	}
+
 	// Use 4mb as chunk.
 	chunkSize := int64(4 * 1024 * 1024)
 	idx := uint64(0)
@@ -63,7 +103,7 @@ func (br *Branch) ReadFrom(r io.Reader) (n int64, err error) {
 		// Update index.
 		idx++
 
-		size, err := br.s.upper.Write(p, r, chunkSize)
+		size, err := br.s.upper.Write(p, r, chunkSize, ps...)
 		// No matter we read success or not, we both need to send data.
 		n += size
 		br.wg.Add(1)

@@ -37,8 +37,8 @@ integration_test:
 	popd
 
 tidy:
-	go mod tidy
-	go mod verify
+	go mod tidy && go mod verify
+	pushd tests && go mod tidy && go mod verify && popd
 
 clean:
 	find . -type f -name 'generated.go' -delete

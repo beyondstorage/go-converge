@@ -1,9 +1,9 @@
 module github.com/beyondstorage/go-stream/tests
 
-go 1.16
+go 1.15
 
 require (
-	github.com/beyondstorage/go-service-memory v0.2.0
+	github.com/beyondstorage/go-service-memory v0.2.1-0.20210823092007-eb22951d1ec2
 	github.com/beyondstorage/go-service-s3/v2 v2.3.0
 	github.com/beyondstorage/go-storage/v4 v4.5.0
 	github.com/beyondstorage/go-stream v0.1.0
