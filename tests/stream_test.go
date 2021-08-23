@@ -2,41 +2,15 @@ package tests
 
 import (
 	"bytes"
-	"os"
+	"math/rand"
 	"testing"
 
-	_ "github.com/beyondstorage/go-service-memory"
-	_ "github.com/beyondstorage/go-service-s3/v2"
-	"github.com/beyondstorage/go-storage/v4/services"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
-
-	"github.com/beyondstorage/go-stream"
 )
 
-func TestStream(t *testing.T) {
-	upperStore, err := services.NewStoragerFromString(os.Getenv("STREAM_UPPER_STORAGE"))
-	if err != nil {
-		t.Fatalf("init upper storage: %v", err)
-	}
-	underStore, err := services.NewStoragerFromString(os.Getenv("STREAM_UNDER_STORAGE"))
-	if err != nil {
-		t.Fatalf("init under storage: %v", err)
-	}
-
-	s, err := stream.NewWithConfig(&stream.Config{
-		Upper:         upperStore,
-		Under:         underStore,
-		PersistMethod: stream.PersistMethodMultipart,
-	})
-	if err != nil {
-		t.Fatalf("init stream: %v", err)
-	}
-	go s.Serve()
-	go func() {
-		for v := range s.Errors() {
-			t.Logf("got error: %v", v)
-		}
-	}()
+func TestStreamWrite(t *testing.T) {
+	s, _, under := setup(t)
 
 	// A bytes with 1k.
 	bs := bytes.Repeat([]byte{'a'}, 1024)
@@ -51,7 +25,9 @@ func TestStream(t *testing.T) {
 
 	for _, v := range cases {
 		t.Run(v.name, func(t *testing.T) {
-			br, err := s.StartBranch(1, "abc")
+			name := uuid.NewString()
+
+			br, err := s.StartBranch(rand.Uint64(), name)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -61,18 +37,64 @@ func TestStream(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+
 			err = br.Complete()
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			var actualContent bytes.Buffer
-			_, err = underStore.Read("abc", &actualContent)
+			_, err = under.Read(name, &actualContent)
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			assert.Equal(t, bytes.Repeat(bs, v.count), actualContent.Bytes())
+		})
+	}
+}
+
+func TestStreamReadFrom(t *testing.T) {
+	s, _, under := setup(t)
+
+	cases := []struct {
+		name string
+		size int
+	}{
+		{"1MB", 1024 * 1024},
+		{"16MB", 16 * 1024 * 1024},
+	}
+
+	for _, v := range cases {
+		t.Run(v.name, func(t *testing.T) {
+			name := uuid.NewString()
+
+			// A bytes with size.
+			bs := bytes.Repeat([]byte{'a'}, v.size)
+
+			br, err := s.StartBranch(rand.Uint64(), name)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			n, err := br.ReadFrom(bytes.NewReader(bs))
+			if err != nil {
+				t.Fatal(err)
+			}
+			assert.Equal(t, n, int64(v.size))
+
+			err = br.Complete()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			var actualContent bytes.Buffer
+			_, err = under.Read(name, &actualContent)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			assert.Equal(t, bs, actualContent.Bytes())
 		})
 	}
 }
