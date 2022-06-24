@@ -8,7 +8,7 @@ require (
 	github.com/beyondstorage/go-storage/v4 v4.8.0
 	github.com/beyondstorage/go-stream v0.1.0
 	github.com/google/uuid v1.3.0
-	github.com/stretchr/testify v1.7.4
+	github.com/stretchr/testify v1.7.5
 )
 
 replace github.com/beyondstorage/go-stream => ../
